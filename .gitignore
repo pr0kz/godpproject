@@ -1,0 +1,24 @@
+# Binaries
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+/bin/
+
+# Go build cache
+/vendor/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# Env files
+.env
+.env.*
+!.env.example
+
+
+
+
