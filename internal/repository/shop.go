@@ -53,5 +53,3 @@ func (r *ShopRepository) List(page, pageSize int, category string) ([]model.Shop
 func (r *ShopRepository) UpdateScore(id uint, score float64) error {
 	return database.GetDB().Model(&model.Shop{}).Where("id = ?", id).Update("score", score).Error
 }
-
-

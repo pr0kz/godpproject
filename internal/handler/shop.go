@@ -7,6 +7,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"ai-review-system/internal/service"
+	"ai-review-system/pkg/jwt"
 )
 
 // CreateShopRequest represents a shop creation request
@@ -82,14 +83,14 @@ func CreateShopHandler(c *gin.Context) {
 
 // registerShopRoutes registers shop-related routes
 // 阶段2：商铺系统
-func registerShopRoutes(r *gin.Engine) {
+func registerShopRoutes(r *gin.Engine, tokens *jwt.Manager) {
 	// Public routes
 	r.GET("/shops", ListShopsHandler)
 	r.GET("/shops/:id", GetShopHandler)
 
 	// Protected routes (require JWT)
 	protected := r.Group("")
-	protected.Use(authMiddlewareFunc())
+	protected.Use(authMiddlewareFunc(tokens))
 	{
 		protected.POST("/shops", CreateShopHandler)
 	}

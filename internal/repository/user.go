@@ -1,48 +1,42 @@
 package repository
 
 import (
-	"ai-review-system/internal/database"
+	"context"
+
 	"ai-review-system/internal/model"
+	"gorm.io/gorm"
 )
 
-// UserRepository handles user data access
-type UserRepository struct{}
-
-// NewUserRepository creates a new user repository
-func NewUserRepository() *UserRepository {
-	return &UserRepository{}
+type UserStore interface {
+	Create(context.Context, *model.User) error
+	GetByUsername(context.Context, string) (*model.User, error)
+	GetByEmail(context.Context, string) (*model.User, error)
+	GetByID(context.Context, uint) (*model.User, error)
 }
 
-// Create creates a new user in the database
-func (r *UserRepository) Create(user *model.User) error {
-	return database.GetDB().Create(user).Error
-}
+type UserRepository struct{ db *gorm.DB }
 
-// GetByUsername retrieves a user by username
-func (r *UserRepository) GetByUsername(username string) (*model.User, error) {
+func NewUserRepository(db *gorm.DB) *UserRepository { return &UserRepository{db: db} }
+func (r *UserRepository) Create(ctx context.Context, user *model.User) error {
+	return r.db.WithContext(ctx).Create(user).Error
+}
+func (r *UserRepository) GetByUsername(ctx context.Context, username string) (*model.User, error) {
 	var user model.User
-	err := database.GetDB().Where("username = ?", username).First(&user).Error
-	if err != nil {
+	if err := r.db.WithContext(ctx).Where("username = ?", username).First(&user).Error; err != nil {
 		return nil, err
 	}
 	return &user, nil
 }
-
-// GetByEmail retrieves a user by email
-func (r *UserRepository) GetByEmail(email string) (*model.User, error) {
+func (r *UserRepository) GetByEmail(ctx context.Context, email string) (*model.User, error) {
 	var user model.User
-	err := database.GetDB().Where("email = ?", email).First(&user).Error
-	if err != nil {
+	if err := r.db.WithContext(ctx).Where("email = ?", email).First(&user).Error; err != nil {
 		return nil, err
 	}
 	return &user, nil
 }
-
-// GetByID retrieves a user by ID
-func (r *UserRepository) GetByID(id uint) (*model.User, error) {
+func (r *UserRepository) GetByID(ctx context.Context, id uint) (*model.User, error) {
 	var user model.User
-	err := database.GetDB().First(&user, id).Error
-	if err != nil {
+	if err := r.db.WithContext(ctx).First(&user, id).Error; err != nil {
 		return nil, err
 	}
 	return &user, nil

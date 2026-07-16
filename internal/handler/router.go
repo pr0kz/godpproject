@@ -3,43 +3,44 @@ package handler
 import (
 	"strings"
 
-	"github.com/gin-gonic/gin"
-
 	"ai-review-system/internal/middleware"
+	jwtpkg "ai-review-system/pkg/jwt"
+	"github.com/gin-gonic/gin"
 )
 
-// NewRouter sets up and returns the Gin router with all routes registered.
-func NewRouter() *gin.Engine {
-	return NewRouterForService("")
+type Dependencies struct {
+	User   *UserHandler
+	Tokens *jwtpkg.Manager
 }
 
-// NewRouterForService sets up routes for a specific service role.
-// Empty serviceRole keeps the original monolith behavior.
-func NewRouterForService(serviceRole string) *gin.Engine {
+func NewRouter(deps Dependencies) *gin.Engine { return NewRouterForService("", deps) }
+func NewRouterForService(serviceRole string, deps Dependencies) *gin.Engine {
 	r := gin.Default()
-
 	registerHealthRoutes(r)
-
 	switch strings.ToLower(serviceRole) {
 	case "user":
-		registerUserRoutes(r)
+		registerUserRoutes(r, deps)
 	case "shop":
-		registerShopRoutes(r)
+		registerShopRoutes(r, deps.Tokens)
 	case "review":
-		registerReviewRoutes(r)
+		registerReviewRoutes(r, deps.Tokens)
 	case "order", "seckill":
-		registerSeckillRoutes(r)
+		registerSeckillRoutes(r, deps.Tokens)
 	default:
-		registerUserRoutes(r)
-		registerShopRoutes(r)
-		registerReviewRoutes(r)
-		registerSeckillRoutes(r)
+		registerUserRoutes(r, deps)
+		registerShopRoutes(r, deps.Tokens)
+		registerReviewRoutes(r, deps.Tokens)
+		registerSeckillRoutes(r, deps.Tokens)
 	}
-
 	return r
 }
-
-// authMiddlewareFunc returns the JWT auth middleware handler.
-func authMiddlewareFunc() gin.HandlerFunc {
-	return middleware.AuthMiddleware()
+func registerUserRoutes(r *gin.Engine, deps Dependencies) {
+	r.POST("/register", deps.User.Register)
+	r.POST("/login", deps.User.Login)
+	protected := r.Group("")
+	protected.Use(middleware.AuthMiddleware(deps.Tokens))
+	protected.GET("/user/profile", deps.User.Profile)
+}
+func authMiddlewareFunc(tokens *jwtpkg.Manager) gin.HandlerFunc {
+	return middleware.AuthMiddleware(tokens)
 }

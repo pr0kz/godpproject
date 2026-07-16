@@ -3,53 +3,51 @@ package database
 import (
 	"context"
 	"fmt"
-	"log"
 	"os"
 	"strconv"
+	"time"
 
 	"github.com/redis/go-redis/v9"
 )
 
 var RedisClient *redis.Client
 
-// InitRedis initializes the Redis connection
 func InitRedis() error {
-	host := os.Getenv("REDIS_HOST")
-	if host == "" {
-		host = "localhost"
-	}
-
-	port := os.Getenv("REDIS_PORT")
-	if port == "" {
-		port = "6379"
-	}
-
 	db := 0
-	if dbStr := os.Getenv("REDIS_DB"); dbStr != "" {
-		if v, err := strconv.Atoi(dbStr); err == nil {
-			db = v
+	if value := os.Getenv("REDIS_DB"); value != "" {
+		parsed, err := strconv.Atoi(value)
+		if err != nil {
+			return fmt.Errorf("invalid REDIS_DB: %w", err)
 		}
+		db = parsed
 	}
-
-	password := os.Getenv("REDIS_PASSWORD")
-
-	RedisClient = redis.NewClient(&redis.Options{
-		Addr:     fmt.Sprintf("%s:%s", host, port),
-		Password: password,
-		DB:       db,
-	})
-
-	ctx := context.Background()
-	if _, err := RedisClient.Ping(ctx).Result(); err != nil {
-		log.Fatalf("Failed to connect to Redis: %v", err)
-		return err
+	host := envOr("REDIS_HOST", "localhost")
+	port := envOr("REDIS_PORT", "6379")
+	client := redis.NewClient(&redis.Options{Addr: host + ":" + port, Password: os.Getenv("REDIS_PASSWORD"), DB: db})
+	var err error
+	for attempt := 0; attempt < 8; attempt++ {
+		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+		err = client.Ping(ctx).Err()
+		cancel()
+		if err == nil {
+			RedisClient = client
+			return nil
+		}
+		time.Sleep(time.Duration(attempt+1) * 500 * time.Millisecond)
 	}
-
-	log.Println("[redis] Connected successfully")
+	_ = client.Close()
+	return fmt.Errorf("connect to Redis: %w", err)
+}
+func GetRedis() *redis.Client { return RedisClient }
+func CloseRedis() error {
+	if RedisClient != nil {
+		return RedisClient.Close()
+	}
 	return nil
 }
-
-// GetRedis returns the Redis client instance
-func GetRedis() *redis.Client {
-	return RedisClient
+func envOr(key, fallback string) string {
+	if value := os.Getenv(key); value != "" {
+		return value
+	}
+	return fallback
 }

@@ -2,72 +2,52 @@ package jwt
 
 import (
 	"errors"
-	"os"
 	"time"
 
-	"github.com/golang-jwt/jwt/v5"
+	jwtlib "github.com/golang-jwt/jwt/v5"
 )
 
-// Claims represents JWT claims
 type Claims struct {
 	UserID   uint   `json:"user_id"`
 	Username string `json:"username"`
 	Email    string `json:"email"`
-	jwt.RegisteredClaims
+	jwtlib.RegisteredClaims
 }
 
-var jwtSecret []byte
-
-func init() {
-	secret := os.Getenv("JWT_SECRET")
-	if secret == "" {
-		secret = "your-secret-key-change-in-production"
-	}
-	jwtSecret = []byte(secret)
+type Manager struct {
+	secret []byte
+	ttl    time.Duration
 }
 
-// GenerateToken generates a JWT token for a user
-func GenerateToken(userID uint, username, email string) (string, error) {
-	expirationTime := time.Now().Add(24 * time.Hour)
-
-	claims := &Claims{
-		UserID:   userID,
-		Username: username,
-		Email:    email,
-		RegisteredClaims: jwt.RegisteredClaims{
-			ExpiresAt: jwt.NewNumericDate(expirationTime),
-			IssuedAt:  jwt.NewNumericDate(time.Now()),
-		},
+func NewManager(secret string, ttl time.Duration) (*Manager, error) {
+	if len(secret) < 32 {
+		return nil, errors.New("JWT secret must contain at least 32 characters")
 	}
-
-	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-	tokenString, err := token.SignedString(jwtSecret)
-	if err != nil {
-		return "", err
+	if ttl <= 0 {
+		return nil, errors.New("JWT TTL must be positive")
 	}
-
-	return tokenString, nil
+	return &Manager{secret: []byte(secret), ttl: ttl}, nil
 }
 
-// VerifyToken verifies a JWT token and returns the claims
-func VerifyToken(tokenString string) (*Claims, error) {
+func (m *Manager) GenerateToken(userID uint, username, email string) (string, error) {
+	now := time.Now()
+	claims := &Claims{UserID: userID, Username: username, Email: email, RegisteredClaims: jwtlib.RegisteredClaims{ExpiresAt: jwtlib.NewNumericDate(now.Add(m.ttl)), IssuedAt: jwtlib.NewNumericDate(now)}}
+	return jwtlib.NewWithClaims(jwtlib.SigningMethodHS256, claims).SignedString(m.secret)
+}
+
+func (m *Manager) VerifyToken(tokenString string) (*Claims, error) {
 	claims := &Claims{}
-
-	token, err := jwt.ParseWithClaims(tokenString, claims, func(token *jwt.Token) (interface{}, error) {
-		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+	token, err := jwtlib.ParseWithClaims(tokenString, claims, func(token *jwtlib.Token) (interface{}, error) {
+		if token.Method != jwtlib.SigningMethodHS256 {
 			return nil, errors.New("unexpected signing method")
 		}
-		return jwtSecret, nil
+		return m.secret, nil
 	})
-
 	if err != nil {
 		return nil, err
 	}
-
 	if !token.Valid {
 		return nil, errors.New("invalid token")
 	}
-
 	return claims, nil
 }
-

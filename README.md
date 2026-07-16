@@ -1,440 +1,305 @@
-# AI Review Platform - 云原生点评系统
+# GoDP — 本地生活点评与秒杀系统
 
-一个从零开始构建的完整微服务架构项目，涵盖后端开发、高并发优化、AI集成和云原生部署的全栈学习路径。
+一个使用 Go 构建的本地生活后端练习项目，覆盖用户认证、商铺、点评、点赞、优惠券秒杀与异步订单处理。项目既可以作为单体服务运行，也提供了按业务拆分的服务入口，并通过 Nginx 统一暴露 API。
 
-## 📋 项目概述
+> 当前定位：用于学习和演示的后端项目，不建议未经加固直接用于生产环境。
 
-**AI Review Platform** 是一个AI增强的云原生点评系统，集成了用户管理、商铺评价、高并发秒杀、AI分析等核心功能。通过30天的分阶段开发，从单体应用逐步演进为完整的微服务架构。
+## 功能
 
-### 核心特性
+- 用户注册、登录与个人资料查询
+- bcrypt 密码哈希与 JWT 身份认证
+- 商铺创建、详情查询、分类与分页列表
+- 点评发布、分页查询与点赞/取消点赞
+- 优惠券创建与秒杀请求
+- Redis Lua 脚本原子扣减库存，数据库侧校验重复下单
+- Kafka 异步投递及消费订单
+- MySQL/GORM 数据持久化与自动迁移
+- 单体和多服务两种启动方式
+- Docker Compose 一键启动完整依赖及 API 网关
+- 健康检查与 HTTP 优雅关闭
 
-- 🔐 完整用户认证系统（JWT）
-- 🏪 商铺管理与点评系统
-- ⚡ 高并发秒杀系统（Redis + Kafka）
-- 🤖 AI评论分析与推荐（LangGraph + RAG）
-- 🐳 容器化部署（Docker + Kubernetes）
-- 📊 可观测性（Prometheus + Grafana）
+## 技术栈
 
-## 🗓️ 开发阶段规划
+- Go 1.25
+- Gin
+- GORM + MySQL 8
+- Redis 7
+- Kafka + Sarama
+- JWT + bcrypt
+- Nginx
+- Docker / Docker Compose
 
-### 阶段0：项目初始化（第1天）
+## 架构概览
 
-**目标**：搭建基础项目框架
+```text
+Client
+  |
+  v
+Nginx Gateway :8081
+  |-- user-service   -> 注册 / 登录 / 用户资料
+  |-- shop-service   -> 商铺
+  |-- review-service -> 点评 / 点赞
+  `-- order-service  -> 优惠券 / 秒杀 -> Redis -> Kafka -> MySQL
 
-**技术栈**：Go、Gin
-
-**学习内容**：
-- Go项目结构规范
-- Go module管理
-- HTTP服务基础
-- 基本路由设计
-
-**开发进度**：
-```
-ai-review-system
-├── cmd
-│   └── server
-├── internal
-│   ├── handler
-│   ├── service
-│   └── repository
-└── pkg
-```
-
-**完成接口**：
-- `GET /ping` - 服务检测
-- `GET /health` - 健康检查
-
-**成果**：可运行的Go Web服务
-
----
-
-### 阶段1：用户系统（第2-3天）
-
-**目标**：实现完整的用户认证系统
-
-**技术栈**：MySQL、GORM、golang-jwt/jwt
-
-**学习内容**：
-- 数据库设计与建模
-- ORM框架使用
-- JWT认证机制
-- 密码加密与安全
-
-**数据库表**：
-- `users` - 用户信息表
-
-**完成接口**：
-- `POST /register` - 用户注册
-- `POST /login` - 用户登录
-- `GET /user/profile` - 获取用户信息
-
-**新增功能**：
-- JWT认证中间件
-- 密码加密存储
-
-**代码模块**：
-```
-internal
-├── model
-├── service
-└── repository
+共享基础设施：MySQL、Redis、Kafka（当前各服务共享同一个数据库）
 ```
 
-**成果**：完整用户系统
+服务拆分目前属于“模块化单体的多进程部署”：各入口复用同一套 `internal` 代码和数据源，并不是完全独立自治的微服务。
 
----
+## 目录结构
 
-### 阶段2：商铺 + 点评系统（第4-6天）
-
-**目标**：构建点评核心功能
-
-**技术栈**：MySQL、Redis
-
-**学习内容**：
-- 分页查询优化
-- 缓存设计模式
-- 热点数据缓存策略
-
-**数据库表**：
-- `shops` - 商铺信息
-- `reviews` - 点评内容
-- `likes` - 点赞记录
-
-**完成接口**：
-
-商铺管理：
-- `GET /shops` - 商铺列表（分页）
-- `GET /shops/{id}` - 商铺详情
-
-点评功能：
-- `POST /reviews` - 发布点评
-- `GET /reviews/{shop_id}` - 获取点评列表
-
-点赞功能：
-- `POST /reviews/{id}/like` - 点赞
-
-**缓存策略**：
-- Shop缓存 - 商铺热点数据
-- Review缓存 - 点评列表缓存
-
-**成果**：基础点评系统
-
----
-
-### 阶段3：高并发优化（第7-9天）
-
-**目标**：实现秒杀系统与高并发处理
-
-**技术栈**：Redis、Apache Kafka
-
-**学习内容**：
-- 缓存穿透、击穿、雪崩问题
-- 消息队列异步处理
-- 流量削峰
-
-**数据库表**：
-- `coupons` - 优惠券信息
-- `orders` - 订单记录
-
-**完成接口**：
-- `POST /seckill/{coupon_id}` - 秒杀下单
-
-**技术实现**：
-- Redis库存管理 - `coupon_stock`
-- Lua脚本 - 原子性扣库存
-- Kafka消息队列 - 异步订单创建
-
-**成果**：高并发秒杀系统
-
----
-
-### 阶段4：微服务架构（第10-14天）
-
-**目标**：从单体应用演进为微服务架构
-
-**技术栈**：gRPC、Consul、Nginx
-
-**学习内容**：
-- 微服务拆分原则
-- gRPC服务通信
-- 服务注册与发现
-
-**服务拆分**：
-```
-原架构：monolith
-
-新架构：
-├── user-service
-├── shop-service
-├── review-service
-└── order-service
+```text
+.
+|-- cmd/
+|   |-- server/          # 单体服务入口
+|   |-- user-service/    # 用户服务入口
+|   |-- shop-service/    # 商铺服务入口
+|   |-- review-service/  # 点评服务入口
+|   |-- order-service/   # 秒杀及订单服务入口
+|   `-- migrate/         # 数据库迁移入口
+|-- internal/
+|   |-- app/             # 应用装配、启动和优雅关闭
+|   |-- config/          # 环境变量读取与校验
+|   |-- database/        # MySQL、Redis、Kafka 与迁移
+|   |-- handler/         # HTTP Handler 和路由
+|   |-- middleware/      # JWT 中间件
+|   |-- model/           # GORM 模型
+|   |-- repository/      # 数据访问层
+|   `-- service/         # 业务逻辑层
+|-- pkg/
+|   |-- crypto/          # 密码哈希
+|   `-- jwt/             # Token 生成与解析
+|-- docker/              # 镜像、Compose 与 Nginx 配置
+|-- .env.example
+|-- go.mod
+`-- go.sum
 ```
 
-**新增组件**：
-- API Gateway - 统一入口
-- Consul - 服务注册中心
-- gRPC - 服务间通信
+## 快速开始（推荐）
 
-**成果**：完整微服务系统
+### 前置条件
 
----
+- Docker Desktop
+- Docker Compose v2
 
-### 阶段5：AI Agent（第15-20天）
+### 1. 创建环境变量文件
 
-**目标**：集成AI能力，增强系统功能
+PowerShell：
 
-**技术栈**：LangGraph、LangChain、FastAPI、Chroma
-
-**学习内容**：
-- LLM集成
-- Prompt工程
-- RAG（检索增强生成）
-- Agent设计模式
-
-**新增服务**：
-- `ai-service` - AI处理服务
-
-**功能模块**：
-
-1. AI评论总结
-   - `POST /ai/review_summary` - 生成商铺评论总结
-
-2. 情感分析
-   - `POST /ai/sentiment` - 分析评论情感
-
-3. AI推荐
-   - `POST /ai/recommend` - 基于RAG的个性化推荐
-
-**成果**：AI增强点评系统
-
----
-
-### 阶段6：云原生（第21-30天）
-
-**目标**：部署到Kubernetes，实现完整的云原生架构
-
-**技术栈**：Kubernetes、Prometheus、Grafana
-
-**学习内容**：
-- Kubernetes Deployment
-- Service与Ingress
-- 可观测性建设
-
-**部署服务**：
-- user-service
-- shop-service
-- review-service
-- ai-service
-
-**监控体系**：
-- Prometheus - 指标收集
-- Grafana - 可视化展示
-
-**成果**：云原生系统
-
----
-
-## 🏗️ 最终项目架构
-
-```
-AI Review Platform
-
-┌─────────────────────────────────────┐
-│          Frontend (Web/App)         │
-└────────────────┬────────────────────┘
-                 │
-         ┌───────▼────────┐
-         │   API Gateway  │
-         └───────┬────────┘
-                 │
-    ┌────────────┼────────────┐
-    │            │            │
-┌───▼──┐    ┌───▼──┐    ┌───▼──┐
-│User  │    │Shop  │    │Review│
-│Svc   │    │Svc   │    │Svc   │
-└───┬──┘    └───┬──┘    └───┬──┘
-    │           │           │
-    └───────────┼───────────┘
-                │
-        ┌───────▼────────┐
-        │ MySQL + Redis  │
-        │ + Kafka        │
-        └────────────────┘
-                │
-        ┌───────▼────────┐
-        │   AI Service   │
-        │  (LangGraph)   │
-        └────────────────┘
-                │
-        ┌───────▼────────┐
-        │  Vector DB     │
-        │  (Chroma)      │
-        └────────────────┘
-
-运行环境：Docker + Kubernetes
-监控：Prometheus + Grafana
+```powershell
+Copy-Item .env.example .env
 ```
 
-## 📁 GitHub项目结构
-
-```
-ai-review-platform/
-│
-├── gateway/                    # API网关
-│   ├── Dockerfile
-│   └── main.go
-│
-├── user-service/              # 用户服务
-│   ├── Dockerfile
-│   ├── cmd/
-│   ├── internal/
-│   └── go.mod
-│
-├── shop-service/              # 商铺服务
-│   ├── Dockerfile
-│   ├── cmd/
-│   ├── internal/
-│   └── go.mod
-│
-├── review-service/            # 点评服务
-│   ├── Dockerfile
-│   ├── cmd/
-│   ├── internal/
-│   └── go.mod
-│
-├── order-service/             # 订单服务
-│   ├── Dockerfile
-│   ├── cmd/
-│   ├── internal/
-│   └── go.mod
-│
-├── ai-service/                # AI服务
-│   ├── Dockerfile
-│   ├── main.py
-│   └── requirements.txt
-│
-├── docker/                     # Docker配置
-│   ├── docker-compose.yml
-│   └── .env
-│
-├── k8s/                        # Kubernetes配置
-│   ├── deployments/
-│   ├── services/
-│   ├── ingress/
-│   └── monitoring/
-│
-├── docs/                       # 文档
-│   ├── API.md
-│   ├── ARCHITECTURE.md
-│   └── DEPLOYMENT.md
-│
-└── README.md
-```
-
-## 🚀 快速开始
-
-### 前置要求
-
-- Go 1.21+
-- Docker & Docker Compose
-- MySQL 8.0+
-- Redis 7.0+
-- Kubernetes 1.24+（可选）
-
-### 本地开发
+Linux/macOS：
 
 ```bash
-# 克隆项目
-git clone https://github.com/yourusername/ai-review-platform.git
-cd ai-review-platform
-
-# 启动所有服务
-docker-compose up -d
-
-# 查看日志
-docker-compose logs -f
+cp .env.example .env
 ```
 
-### Kubernetes部署
+编辑 `.env`，至少替换以下值：
+
+```dotenv
+MYSQL_ROOT_PASSWORD=your-local-root-password
+DB_PASSWORD=your-local-app-password
+JWT_SECRET=replace-with-a-random-secret-at-least-32-characters
+```
+
+不要提交 `.env`。生产环境应使用独立的密钥管理方案。
+
+### 2. 启动
+
+从项目根目录执行：
 
 ```bash
-# 应用配置
-kubectl apply -f k8s/
-
-# 查看部署状态
-kubectl get deployments
-kubectl get services
-
-# 访问应用
-kubectl port-forward svc/api-gateway 8080:8080
+docker compose --env-file .env -f docker/docker-compose.yml up --build
 ```
 
-## 💡 核心技术亮点
+首次启动会构建服务、等待 MySQL 就绪、执行迁移，然后启动业务服务和网关。
 
-### 1. 微服务架构
-- 服务独立部署与扩展
-- gRPC高效通信
-- Consul服务发现
+### 3. 验证
 
-### 2. 高并发秒杀系统
-- Redis原子操作
-- Lua脚本库存扣减
-- Kafka异步订单处理
-- 流量削峰设计
+```bash
+curl http://localhost:8081/health
+```
 
-### 3. AI能力集成
-- LangGraph Agent框架
-- RAG检索增强生成
-- 评论智能总结
-- 个性化推荐
+预期响应：
 
-### 4. 云原生部署
-- 完整容器化
-- Kubernetes编排
-- Prometheus监控
-- Grafana可视化
+```json
+{"status":"ok","service":"api-gateway"}
+```
 
-## 📚 学习路径
+API 基础地址为 `http://localhost:8081`。
 
-| 阶段 | 时间 | 核心技能 | 难度 |
-|------|------|--------|------|
-| 0 | 1天 | Go基础、Gin框架 | ⭐ |
-| 1 | 2-3天 | 数据库、JWT认证 | ⭐⭐ |
-| 2 | 4-6天 | 缓存设计、分页查询 | ⭐⭐ |
-| 3 | 7-9天 | 高并发、消息队列 | ⭐⭐⭐ |
-| 4 | 10-14天 | 微服务、gRPC | ⭐⭐⭐ |
-| 5 | 15-20天 | AI集成、RAG | ⭐⭐⭐⭐ |
-| 6 | 21-30天 | Docker、Kubernetes、监控 | ⭐⭐⭐⭐ |
+### 4. 停止
 
-## 🎯 简历亮点总结
+```bash
+docker compose --env-file .env -f docker/docker-compose.yml down
+```
 
-**项目名称**：AI增强云原生点评系统
+同时删除 MySQL 和 Redis 数据卷：
 
-**技术栈**：Go + gRPC + Redis + Kafka + Docker + Kubernetes + LangGraph
+```bash
+docker compose --env-file .env -f docker/docker-compose.yml down -v
+```
 
-**核心亮点**：
-- ✨ 完整微服务架构设计与实现
-- ✨ 高并发秒杀系统（支持10万+QPS）
-- ✨ AI评论总结与情感分析
-- ✨ RAG推荐系统
-- ✨ 云原生Kubernetes部署
-- ✨ 完整可观测性体系
+## 本地开发
 
-## 📖 相关文档
+本地直接运行 Go 服务时，需要先准备可访问的 MySQL、Redis 和 Kafka，并把 `.env.example` 中的容器主机名改为本机地址，例如：
 
-- [API文档](./docs/API.md) - 完整接口说明
-- [架构设计](./docs/ARCHITECTURE.md) - 系统架构详解
-- [部署指南](./docs/DEPLOYMENT.md) - 部署步骤
+```dotenv
+DB_HOST=localhost
+REDIS_HOST=localhost
+KAFKA_BROKERS=localhost:9092
+```
 
-## 📝 许可证
+注意：程序不会自动读取 `.env` 文件，需要在当前 Shell 中导入环境变量，或由 IDE 运行配置注入。
 
-MIT License
+先迁移数据库：
 
-## 👤 作者
+```bash
+go run ./cmd/migrate
+```
 
-Your Name
+运行包含全部路由的单体服务：
 
----
+```bash
+go run ./cmd/server
+```
 
-**开始你的30天学习之旅吧！** 🚀
+默认监听 `http://localhost:8080`。单体入口也会初始化 Kafka 并启动订单消费者，因此 Kafka 必须可用。
+
+也可以分别运行：
+
+```bash
+go run ./cmd/user-service
+go run ./cmd/shop-service
+go run ./cmd/review-service
+go run ./cmd/order-service
+```
+
+分别运行时，各进程需要配置不同的 `PORT`；Docker Compose 场景中它们位于独立容器，因此都可使用 8080。
+
+## 配置
+
+| 变量 | 必填 | 默认值 | 说明 |
+| --- | --- | --- | --- |
+| `APP_ENV` | 否 | `development` | 运行环境；`production` 会启用额外配置校验 |
+| `SERVICE_ROLE` | 否 | 空 | 路由角色：`user`、`shop`、`review`、`order` |
+| `PORT` | 否 | `8080` | HTTP 监听端口 |
+| `DB_HOST` | 否 | `localhost` | MySQL 地址 |
+| `DB_PORT` | 否 | `3306` | MySQL 端口 |
+| `DB_NAME` | 否 | `ai_review_system` | 数据库名 |
+| `DB_USER` | 是 | 无 | 数据库用户 |
+| `DB_PASSWORD` | 是 | 无 | 数据库密码 |
+| `REDIS_HOST` | 否 | `localhost` | Redis 地址 |
+| `REDIS_PORT` | 否 | `6379` | Redis 端口 |
+| `KAFKA_BROKERS` | 否 | `localhost:9092` | Broker 列表，多个地址用逗号分隔 |
+| `JWT_SECRET` | 是 | 无 | JWT 密钥，至少 32 个字符 |
+
+## API
+
+除公开接口外，请携带：
+
+```http
+Authorization: Bearer <token>
+Content-Type: application/json
+```
+
+| 方法 | 路径 | 鉴权 | 说明 |
+| --- | --- | --- | --- |
+| `GET` | `/health` | 否 | 健康检查 |
+| `GET` | `/ping` | 否 | 应用存活检查 |
+| `POST` | `/register` | 否 | 注册用户 |
+| `POST` | `/login` | 否 | 登录并获取 JWT |
+| `GET` | `/user/profile` | 是 | 查询当前用户 |
+| `GET` | `/shops` | 否 | 商铺分页列表，可传 `page`、`page_size`、`category` |
+| `GET` | `/shops/:id` | 否 | 商铺详情 |
+| `POST` | `/shops` | 是 | 创建商铺 |
+| `GET` | `/reviews/:shop_id` | 否 | 查询商铺点评，可传 `page`、`page_size` |
+| `POST` | `/reviews` | 是 | 发布点评 |
+| `POST` | `/reviews/:id/like` | 是 | 点赞或取消点赞 |
+| `POST` | `/coupons` | 是 | 创建优惠券 |
+| `POST` | `/seckill/:coupon_id` | 是 | 提交秒杀请求，成功返回 202 |
+
+### 调用示例
+
+注册：
+
+```bash
+curl -X POST http://localhost:8081/register \
+  -H "Content-Type: application/json" \
+  -d '{"username":"alice","email":"alice@example.com","password":"secret123"}'
+```
+
+登录：
+
+```bash
+curl -X POST http://localhost:8081/login \
+  -H "Content-Type: application/json" \
+  -d '{"username":"alice","password":"secret123"}'
+```
+
+创建商铺：
+
+```bash
+curl -X POST http://localhost:8081/shops \
+  -H "Authorization: Bearer YOUR_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"name":"Demo Cafe","category":"cafe","address":"No. 1 Demo Road","description":"A demo shop","avg_price":35}'
+```
+
+创建点评：
+
+```bash
+curl -X POST http://localhost:8081/reviews \
+  -H "Authorization: Bearer YOUR_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"shop_id":1,"content":"Good experience","score":5}'
+```
+
+创建优惠券时，`begin_time` 与 `end_time` 使用 Unix 秒级时间戳：
+
+```bash
+curl -X POST http://localhost:8081/coupons \
+  -H "Authorization: Bearer YOUR_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"title":"50% off","stock":100,"discount":0.5,"begin_time":1767225600,"end_time":1893456000}'
+```
+
+发起秒杀：
+
+```bash
+curl -X POST http://localhost:8081/seckill/1 \
+  -H "Authorization: Bearer YOUR_TOKEN"
+```
+
+## 测试
+
+```bash
+go test ./...
+```
+
+如果所在网络无法访问 `proxy.golang.org`，可先配置可用的 Go 模块代理，再重试依赖下载和测试。例如：
+
+```bash
+go env -w GOPROXY=https://goproxy.cn,direct
+```
+
+是否使用第三方代理应由你所在组织的安全策略决定。
+
+## 当前限制与改进方向
+
+- 商铺、点评等 Handler 在请求内直接创建 Service，依赖注入尚未统一，测试替身不易接入。
+- 各服务共享数据库与内部代码，服务边界偏部署层，距离真正的微服务自治仍有差距。
+- 创建商铺和优惠券仅要求登录，没有管理员或商户角色授权。
+- API 错误格式和错误码尚未统一，部分内部错误会直接返回给客户端。
+- 缺少请求限流、熔断、链路追踪、结构化日志与 Prometheus 指标。
+- 自动化测试覆盖较低，秒杀并发、Redis/Kafka 故障与幂等场景尤其需要集成测试。
+- 分页参数缺少严格的边界校验；图片字段仍是字符串，缺少独立资源模型。
+- Kafka 使用 ZooKeeper 模式，后续可考虑迁移到 KRaft，并完善重试、死信队列和消费幂等。
+- Compose 中间件端口直接暴露到宿主机，生产部署应收紧网络、凭据与访问控制。
+- 仓库根目录存在若干手工请求 JSON，建议迁移为自动化 API/集成测试数据。
+
+## License
+
+当前仓库未声明开源许可证。在添加明确的 `LICENSE` 前，请勿默认将其视为可自由再分发的软件。

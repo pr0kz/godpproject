@@ -2,54 +2,45 @@ package repository
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
 	"ai-review-system/internal/database"
 	"ai-review-system/internal/model"
+	"gorm.io/gorm"
 )
 
 const couponStockKeyFmt = "coupon_stock:%d"
 const couponStockTTL = 24 * time.Hour
 
-// CouponRepository handles coupon data access
-type CouponRepository struct{}
+type CouponRepository struct{ db *gorm.DB }
 
-func NewCouponRepository() *CouponRepository {
-	return &CouponRepository{}
-}
-
-// Create creates a new coupon and initialises its Redis stock
+func NewCouponRepository() *CouponRepository                  { return &CouponRepository{db: database.GetDB()} }
+func NewCouponRepositoryWithDB(db *gorm.DB) *CouponRepository { return &CouponRepository{db: db} }
 func (r *CouponRepository) Create(coupon *model.Coupon) error {
-	if err := database.GetDB().Create(coupon).Error; err != nil {
+	if err := r.db.Create(coupon).Error; err != nil {
 		return err
 	}
-	// Pre-load stock into Redis
-	ctx := context.Background()
-	key := fmt.Sprintf(couponStockKeyFmt, coupon.ID)
-	database.GetRedis().Set(ctx, key, coupon.Stock, couponStockTTL)
-	return nil
+	return database.GetRedis().Set(context.Background(), fmt.Sprintf(couponStockKeyFmt, coupon.ID), coupon.Stock, couponStockTTL).Err()
 }
-
-// GetByID retrieves a coupon by ID
 func (r *CouponRepository) GetByID(id uint) (*model.Coupon, error) {
 	var coupon model.Coupon
-	if err := database.GetDB().First(&coupon, id).Error; err != nil {
+	if err := r.db.First(&coupon, id).Error; err != nil {
 		return nil, err
 	}
 	return &coupon, nil
 }
-
-// DecrStock decrements coupon stock in DB (called after Kafka consumer)
 func (r *CouponRepository) DecrStock(id uint) error {
-	return database.GetDB().
-		Model(&model.Coupon{}).
-		Where("id = ? AND stock > 0", id).
-		UpdateColumn("stock", database.GetDB().Raw("stock - 1")).
-		Error
+	result := r.db.Model(&model.Coupon{}).Where("id = ? AND stock > 0", id).UpdateColumn("stock", gorm.Expr("stock - 1"))
+	if result.Error != nil {
+		return result.Error
+	}
+	if result.RowsAffected != 1 {
+		return errors.New("sold out")
+	}
+	return nil
 }
-
-// EnsureRedisStock ensures the Redis stock key exists; loads from DB if missing
 func (r *CouponRepository) EnsureRedisStock(ctx context.Context, id uint) error {
 	key := fmt.Sprintf(couponStockKeyFmt, id)
 	exists, err := database.GetRedis().Exists(ctx, key).Result()
@@ -61,7 +52,7 @@ func (r *CouponRepository) EnsureRedisStock(ctx context.Context, id uint) error 
 		if err != nil {
 			return err
 		}
-		database.GetRedis().Set(ctx, key, coupon.Stock, couponStockTTL)
+		return database.GetRedis().Set(ctx, key, coupon.Stock, couponStockTTL).Err()
 	}
 	return nil
 }

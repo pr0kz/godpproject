@@ -16,12 +16,12 @@ func Init() error {
 	// Get database configuration from environment variables
 	dbUser := os.Getenv("DB_USER")
 	if dbUser == "" {
-		dbUser = "root"
+		return fmt.Errorf("DB_USER is required")
 	}
 
 	dbPassword := os.Getenv("DB_PASSWORD")
 	if dbPassword == "" {
-		dbPassword = "root"
+		return fmt.Errorf("DB_PASSWORD is required")
 	}
 
 	dbHost := os.Getenv("DB_HOST")
@@ -45,8 +45,7 @@ func Init() error {
 
 	db, err := gorm.Open(mysql.Open(dsn), &gorm.Config{})
 	if err != nil {
-		log.Fatalf("Failed to connect to database: %v", err)
-		return err
+		return fmt.Errorf("connect to database: %w", err)
 	}
 
 	DB = db
@@ -58,4 +57,3 @@ func Init() error {
 func GetDB() *gorm.DB {
 	return DB
 }
-

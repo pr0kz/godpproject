@@ -7,6 +7,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"ai-review-system/internal/service"
+	"ai-review-system/pkg/jwt"
 )
 
 // CreateReviewRequest represents a review creation request
@@ -98,15 +99,15 @@ func LikeReviewHandler(c *gin.Context) {
 
 // registerReviewRoutes registers review-related routes
 // 阶段2：点评系统
-func registerReviewRoutes(r *gin.Engine) {
+func registerReviewRoutes(r *gin.Engine, tokens *jwt.Manager) {
 	// Public routes
 	r.GET("/reviews/:shop_id", GetReviewsHandler)
 
 	// Protected routes (require JWT)
 	protected := r.Group("")
-	protected.Use(authMiddlewareFunc())
+	protected.Use(authMiddlewareFunc(tokens))
 	{
 		protected.POST("/reviews", CreateReviewHandler)
 		protected.POST("/reviews/:id/like", LikeReviewHandler)
-}
+	}
 }
